@@ -6,57 +6,6 @@ from transformers import LlamaForCausalLM
 from process_kge import load_pretrain_kge
 
 
-class KoPA(nn.Module):
-    def __init__(
-        self,
-        model: LlamaForCausalLM
-    ) -> None:
-        super(KoPA, self).__init__()
-        self.llama_model = model
-        # self.embeddings = nn.Embedding(100, 4096)
-        self.embeddings = PrefixKGEmbedding(
-            num_ent=2034,
-            num_rel=42,
-            dim_llm=4096,
-            num_prefix=1
-        )
-    
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        embedding_ids: torch.LongTensor = None
-    ):
-        kg_embeds = self.embeddings(embedding_ids)
-        batch_size, seq_len, _ = kg_embeds.shape
-        token_embeds = self.llama_model.model.model.embed_tokens(input_ids)
-        input_embeds = torch.cat((kg_embeds, token_embeds), dim=1)
-        prefix_mask = torch.ones((batch_size, seq_len))
-        prefix_labels = torch.full((batch_size, seq_len), fill_value=-100, dtype=torch.long)
-        new_attention_mask = torch.cat((prefix_mask.cuda(), attention_mask), dim=-1)
-        new_labels = torch.cat((prefix_labels.cuda(), labels), dim=-1)
-        return self.llama_model(
-            input_ids=None,
-            attention_mask=new_attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=input_embeds,
-            labels=new_labels,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-
 class KoPAWithAdapter(nn.Module):
     def __init__(
         self,
@@ -95,7 +44,6 @@ class KoPAWithAdapter(nn.Module):
         embedding_ids: torch.LongTensor = None
     ):
         kg_embeds = self.embeddings(embedding_ids)
-        # print(kg_embeds.shape)
         batch_size, seq_len, _ = kg_embeds.shape
         token_embeds = self.llama_model.model.model.embed_tokens(input_ids)
         input_embeds = torch.cat((kg_embeds, token_embeds), dim=1)
@@ -116,29 +64,6 @@ class KoPAWithAdapter(nn.Module):
             return_dict=return_dict,
         )
 
-
-
-class PrefixKGEmbedding(nn.Module):
-    def __init__(
-        self,
-        num_ent,
-        num_rel,
-        dim_llm,
-        num_prefix
-    ):
-        super(PrefixKGEmbedding, self).__init__()
-        self.emb_dim = num_prefix * dim_llm
-        self.ent_embeddings = nn.Embedding(num_ent, self.emb_dim)
-        self.rel_embeddings = nn.Embedding(num_rel, self.emb_dim)
-    
-
-    def forward(self, triple_ids):
-        head, relation, tail = triple_ids[:, 0], triple_ids[:, 1], triple_ids[:, 2]
-        h = self.ent_embeddings(head)
-        r = self.rel_embeddings(relation)
-        t = self.ent_embeddings(tail)
-        prefix = torch.stack((h, r, t), dim=1)
-        return prefix
 
 class PretrainKGEmbedding(nn.Module):
     def __init__(
@@ -176,6 +101,5 @@ class PretrainKGEmbedding(nn.Module):
             ent = triple_ids.reshape(-1,)
             emb = self.ent_embeddings(ent)
             prefix = self.adapter(emb).reshape(-1, self.num_prefix, self.llm_dim)
-            # print(prefix.shape)
             return prefix
 

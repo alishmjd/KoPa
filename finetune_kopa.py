@@ -6,14 +6,7 @@ import fire
 import torch
 import transformers
 from datasets import load_dataset
-from kopa import KoPA, KoPAWithAdapter
-
-"""
-Unused imports:
-import torch.nn as nn
-import bitsandbytes as bnb
-"""
-
+from kopa import KoPAWithAdapter
 from peft import (
     LoraConfig,
     get_peft_model,
@@ -28,9 +21,9 @@ from utils.prompter import Prompter
 
 def train(
     # model/data params
-    base_model: str = "",  # the only required argument
-    data_path: str = "YOUR LLM PATH",
-    output_dir: str = "./lora-alpaca",
+    base_model: str = "baffo32/decapoda-research-llama-7B-hf",  # the only required argument
+    data_path: str = "data/CoDeX-S-train.json",
+    output_dir: str = "./mymodel",
     # training hyperparams
     batch_size: int = 16,
     micro_batch_size: int = 16,
@@ -58,7 +51,7 @@ def train(
     wandb_log_model: str = "",  # options: false | true
     resume_from_checkpoint: str = None,  # either training checkpoint or final adapter
     prompt_template_name: str = "alpaca",  # The prompt template to use, will default to alpaca.
-    kge_model: str = "data/CoDeX-S.pth"
+    kge_model: str = "data/CoDeX-S-rotate.pth"
 ):
     if int(os.environ.get("LOCAL_RANK", 0)) == 0:
         print(
@@ -105,11 +98,9 @@ def train(
 
     model = LlamaForCausalLM.from_pretrained(
         base_model,
-        # load_in_8bit=True,
         torch_dtype=torch.float32,
         device_map=device_map,
-    )#.to(torch.device("cuda"))
-    # model = model.to_empty(torch.device("cuda"))
+    )
 
     tokenizer = LlamaTokenizer.from_pretrained(base_model)
 
@@ -119,8 +110,6 @@ def train(
     tokenizer.padding_side = "left"  # Allow batched inference
 
     def tokenize(prompt, add_eos_token=True):
-        # there's probably a way to do this with the tokenizer settings
-        # but again, gotta move fast
         result = tokenizer(
             prompt,
             truncation=True,
@@ -166,7 +155,6 @@ def train(
             ]  # could be sped up, probably
         return tokenized_full_prompt
 
-    # model = prepare_model_for_int8_training(model)
 
     config = LoraConfig(
         r=lora_r,
@@ -196,7 +184,6 @@ def train(
             resume_from_checkpoint = (
                 False  # So the trainer won't try loading its state
             )
-        # The two files above have a different name depending on how they were saved, but are actually the same.
         if os.path.exists(checkpoint_name):
             print(f"Restarting from {checkpoint_name}")
             adapters_weights = torch.load(checkpoint_name)
@@ -204,7 +191,6 @@ def train(
         else:
             print(f"Checkpoint {checkpoint_name} not found")
 
-    # model.print_trainable_parameters()  # Be more transparent about the % of trainable params.
 
     if val_set_size > 0:
         train_val = data["train"].train_test_split(
@@ -237,9 +223,7 @@ def train(
             learning_rate=learning_rate,
             fp16=True,
             logging_steps=10,
-            #optim="adamw_hf",
             optim="adamw_torch",
-            #evaluation_strategy="steps" if val_set_size > 0 else "no",
             save_strategy="steps",
             eval_steps=None,
             save_steps=5000,
@@ -264,17 +248,13 @@ def train(
         )
     ).__get__(model, type(model))
 
-    if torch.__version__ >= "2" and sys.platform != "win32":
-        model = torch.compile(model)
+#    if torch.__version__ >= "2" and sys.platform != "win32":
+#        model = torch.compile(model)
 
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
     model.save_pretrained(output_dir)
     torch.save(slama_model.embeddings, os.path.join(output_dir, "embeddings.pth"))
-
-    print(
-        "\n If there's a warning about missing keys above, please disregard :)"
-    )
 
 
 if __name__ == "__main__":

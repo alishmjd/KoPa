@@ -29,9 +29,7 @@ def load_test_dataset(path):
 
 if __name__ == "__main__":
     cuda = "cuda:0"
-    # lora_weights = "YOUR SAVE PATH"
     lora_weights = "mymodel"
-    # test_data_path = "data/UMLS-test.json"
     test_data_path = "data/CoDeX-S-test.json"
     embedding_path = "{}/embeddings.pth".format(lora_weights)
     test_dataset = load_test_dataset(test_data_path)
