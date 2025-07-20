@@ -57,7 +57,7 @@ Fine-tuned model can be downloaded from [this link](https://drive.google.com/dri
 ## Evaluation
 |Parameters| Value |
 |----------|-------|
-|Accuracy|  |
-|Presicion|   |
-|Recall|    |
-|F1-score|  |
+|Accuracy| 0.5002 |
+|Presicion| 0.5001 |
+|Recall|  1.0  |
+|F1-score| 0.666 |
